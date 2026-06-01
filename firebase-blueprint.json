@@ -1,0 +1,160 @@
+{
+  "entities": {
+    "CenterConfig": {
+      "title": "Center Configuration",
+      "description": "System branding, localization, currency and WhatsApp automation settings.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The educational center's brand name" },
+        "currency": { "type": "string", "description": "L.E, EGP, USD, etc." },
+        "whatsappApiUrl": { "type": "string", "description": "Gateway base URL for sending messages" },
+        "whatsappToken": { "type": "string", "description": "Credential token for WhatsApp API" },
+        "whatsappInstanceId": { "type": "string", "description": "WhatsApp gateway instance ID" },
+        "whatsappEnabled": { "type": "boolean", "description": "Global toggle for automated notifications" },
+        "welcomeTemplate": { "type": "string", "description": "Template text for new student registrations" },
+        "attendanceTemplate": { "type": "string", "description": "Template text for real-time arrival scan notifications" }
+      },
+      "required": ["name", "currency", "whatsappEnabled"]
+    },
+    "Student": {
+      "title": "Student Profile",
+      "description": "Student registration record including parents' contact and auto-incrementing custom ID.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "Custom beautiful sequential ID (e.g. std001, std002)" },
+        "name": { "type": "string", "description": "Full name of the student" },
+        "phone": { "type": "string", "description": "Mobile number of the student" },
+        "parentPhone": { "type": "string", "description": "WhatsApp/phone contact of the parent" },
+        "academicYear": { "type": "string", "description": "School/academic stage of the student" },
+        "qrCodeData": { "type": "string", "description": "Unique QR string matching studentId or unique UID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Record creation timestamp" }
+      },
+      "required": ["studentId", "name", "phone", "parentPhone", "academicYear", "qrCodeData", "createdAt"]
+    },
+    "Teacher": {
+      "title": "Teacher Profile",
+      "description": "Instructor registry holding default financial shares and subject mapping.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the teacher" },
+        "phone": { "type": "string", "description": "Teacher contact phone number" },
+        "subject": { "type": "string", "description": "Course/Subject description" },
+        "defaultShare": { "type": "number", "description": "Default share percentage for sessions (e.g. 70 for 70%)" }
+      },
+      "required": ["name", "phone", "subject", "defaultShare"]
+    },
+    "ClassGroup": {
+      "title": "Class/Group Configuration",
+      "description": "Rosters and scheduling groups defining teachers, session-pricing, and material configs.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string", "description": "Associated teacher primary key" },
+        "name": { "type": "string", "description": "Group title (e.g., Sunday 5 PM High School 1st)" },
+        "pricePerSession": { "type": "number", "description": "Fees paid by student for each session attendance" },
+        "bookletPrice": { "type": "number", "description": "Price charged to student for booklets/lesson notes" },
+        "bookletCost": { "type": "number", "description": "Base print/wholesale cost of the booklet to calculate net margins" },
+        "bookletStock": { "type": "number", "description": "Remaining quantity of materials in local stock" },
+        "teacherShare": { "type": "number", "description": "Session percentage shared with teacher (e.g., 70)" },
+        "schedule": { "type": "string", "description": "Formatted days and hours of meetings" }
+      },
+      "required": ["teacherId", "name", "pricePerSession", "bookletPrice", "bookletCost", "bookletStock", "teacherShare", "schedule"]
+    },
+    "AttendanceLog": {
+      "title": "Attendance & Billing Log",
+      "description": "Daily real-time logs processing scanned QR inputs, instant cashier/material distribution and Parent notification payloads.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "Reference key of student" },
+        "studentName": { "type": "string", "description": "De-normalized student name for UI" },
+        "groupId": { "type": "string", "description": "Reference key of session group" },
+        "sessionId": { "type": "string", "description": "Associated active dynamic session log PK" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Scan and sign-in exact time" },
+        "status": { "type": "string", "enum": ["present", "absent"], "description": "Daily enrollment state" },
+        "isPaid": { "type": "boolean", "description": "Whether session price is paid on site" },
+        "paymentAmount": { "type": "number", "description": "Session cash collected directly from student" },
+        "bookletReceived": { "type": "boolean", "description": "Whether student received the session booklet" },
+        "bookletPaid": { "type": "boolean", "description": "Whether booklet fee is settled in cash session" }
+      },
+      "required": ["studentId", "studentName", "groupId", "sessionId", "timestamp", "status", "isPaid", "paymentAmount", "bookletReceived", "bookletPaid"]
+    },
+    "FinancialSession": {
+      "title": "Active Financial Session",
+      "description": "Financial ledger document generated per group meeting logging revenue and teacher shares.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string", "description": "Group primary key" },
+        "sessionDate": { "type": "string", "format": "date-time", "description": "Date of meeting" },
+        "totalAttendance": { "type": "number", "description": "Total scanned present students" },
+        "totalSessionRevenue": { "type": "number", "description": "Sum of attendance fees collected or expected" },
+        "totalBookletsSold": { "type": "number", "description": "Count of booklets distributed to students" },
+        "totalBookletRevenue": { "type": "number", "description": "Cash collected from booklet sales" },
+        "teacherEarnings": { "type": "number", "description": "Calculated earnings share of the teacher" },
+        "centerEarnings": { "type": "number", "description": "Calculated earnings share of the center" },
+        "cashCollected": { "type": "number", "description": "Actual physically collected drawer cash" },
+        "isClosed": { "type": "boolean", "description": "Lock state on session financials" },
+        "closedAt": { "type": "string", "format": "date-time", "description": "Time when session billing is frozen" }
+      },
+      "required": ["groupId", "sessionDate", "totalAttendance", "totalSessionRevenue", "totalBookletsSold", "totalBookletRevenue", "teacherEarnings", "centerEarnings", "cashCollected", "isClosed"]
+    },
+    "CenterExpense": {
+      "title": "Expense Voucher",
+      "description": "General center operations expenses (Rent, Water, Power, Assistant Hourly salaries).",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "description": "Voucher type: Rent, Utilities, Salaries, Marketing, Others" },
+        "amount": { "type": "number", "description": "Subtracted cash value from center drawer" },
+        "description": { "type": "string", "description": "Dynamic comment explaining the outflow" },
+        "date": { "type": "string", "format": "date-time", "description": "Expense transaction date" },
+        "addedBy": { "type": "string", "description": "Operator ID logged" }
+      },
+      "required": ["category", "amount", "description", "date", "addedBy"]
+    },
+    "UserProfile": {
+      "title": "User Profile (RBAC)",
+      "description": "System operators (Admins, Teachers, Assistants/Scanners) with strict authorization levels.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth unique ID" },
+        "name": { "type": "string", "description": "Full name of the operator" },
+        "email": { "type": "string", "description": "Operator registered email" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "assistant"], "description": "Access control role" },
+        "teacherId": { "type": "string", "description": "ID of mapped Teacher record (if role is teacher)" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/centers_config/{configId}": {
+      "schema": "CenterConfig",
+      "description": "Singleton configuration path for localized variables and gateway APIs."
+    },
+    "/user_profiles/{uid}": {
+      "schema": "UserProfile",
+      "description": "Access control profile mapping with strict role boundaries."
+    },
+    "/students/{studentDocId}": {
+      "schema": "Student",
+      "description": "Independent master collection cataloging registered students across groups."
+    },
+    "/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "Independent catalog of teachers."
+    },
+    "/classes_groups/{groupId}": {
+      "schema": "ClassGroup",
+      "description": "Core active target groupings matching teachers and schedule rules."
+    },
+    "/attendance_logs/{logId}": {
+      "schema": "AttendanceLog",
+      "description": "Flat daily log records querying individual attendance states."
+    },
+    "/financial_sessions/{sessionId}": {
+      "schema": "FinancialSession",
+      "description": "Live sessions for tracking cash boxes and splits."
+    },
+    "/center_expenses/{expenseId}": {
+      "schema": "CenterExpense",
+      "description": "Outflow transaction cataloging general costs."
+    }
+  }
+}

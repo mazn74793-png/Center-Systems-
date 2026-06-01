@@ -1,0 +1,6 @@
+{
+  "name": "EduCenter Master",
+  "description": "The ultimate billing & management platform for Educational Centers featuring auto seq-IDs, multi-role dashboards, automated WhatsApp triggers and webcam QR gates.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

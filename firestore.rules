@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. GLOBAL SAFETY NET - Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVE HELPERS (PHASE 3) ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email == "motaem23y@gmail.com");
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Access role of current user
+    function getUserRole() {
+      return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "motaem23y@gmail.com" || 
+        exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) && getUserRole() == "admin"
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) && getUserRole() == "teacher";
+    }
+
+    function isAssistant() {
+      return isSignedIn() && exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) && getUserRole() == "assistant";
+    }
+
+    function getTeacherId() {
+      return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.teacherId;
+    }
+
+    // Check if session is closed/frozen
+    function isSessionClosed(sessionId) {
+      return get(/databases/$(database)/documents/financial_sessions/$(sessionId)).data.isClosed == true;
+    }
+
+    // --- VALIDATION HELPERS (PHASE 4) ---
+
+    function isValidCenterConfig(config) {
+      return config.name is string && config.name.size() > 0 && config.name.size() <= 100
+        && config.currency is string && config.currency.size() > 0 && config.currency.size() <= 10
+        && config.whatsappEnabled is bool;
+    }
+
+    function isValidUserProfile(profile) {
+      return profile.uid == request.auth.uid
+        && profile.name is string && profile.name.size() > 0 && profile.name.size() <= 100
+        && profile.email is string && profile.email.size() > 0 && profile.email.size() <= 100
+        && profile.role is string && (profile.role == "admin" || profile.role == "teacher" || profile.role == "assistant");
+    }
+
+    function isValidStudent(student) {
+      return student.studentId is string && student.studentId.size() > 0 && student.studentId.size() <= 30 && student.studentId.matches('^[a-zA-Z0-9_\\-]+$')
+        && student.name is string && student.name.size() > 0 && student.name.size() <= 100
+        && student.phone is string && student.phone.size() <= 20
+        && student.parentPhone is string && student.parentPhone.size() <= 20
+        && student.academicYear is string && student.academicYear.size() <= 50;
+    }
+
+    function isValidTeacher(teacher) {
+      return teacher.name is string && teacher.name.size() > 0 && teacher.name.size() <= 100
+        && teacher.phone is string && teacher.phone.size() <= 20
+        && teacher.subject is string && teacher.subject.size() <= 50
+        && teacher.defaultShare is number && teacher.defaultShare >= 0 && teacher.defaultShare <= 100;
+    }
+
+    function isValidClassGroup(group) {
+      return isValidId(group.teacherId)
+        && group.name is string && group.name.size() > 0 && group.name.size() <= 100
+        && group.pricePerSession is number && group.pricePerSession >= 0
+        && group.bookletPrice is number && group.bookletPrice >= 0
+        && group.bookletCost is number && group.bookletCost >= 0
+        && group.bookletStock is number
+        && group.teacherShare is number && group.teacherShare >= 0 && group.teacherShare <= 100
+        && group.schedule is string;
+    }
+
+    function isValidAttendanceLog(log) {
+      return isValidId(log.studentId)
+        && log.studentName is string && log.studentName.size() > 0
+        && isValidId(log.groupId)
+        && isValidId(log.sessionId)
+        && log.status is string && (log.status == "present" || log.status == "absent")
+        && log.isPaid is bool
+        && log.paymentAmount is number && log.paymentAmount >= 0
+        && log.bookletReceived is bool
+        && log.bookletPaid is bool;
+    }
+
+    function isValidFinancialSession(session) {
+      return isValidId(session.groupId)
+        && session.totalAttendance is number && session.totalAttendance >= 0
+        && session.totalSessionRevenue is number && session.totalSessionRevenue >= 0
+        && session.totalBookletsSold is number && session.totalBookletsSold >= 0
+        && session.totalBookletRevenue is number && session.totalBookletRevenue >= 0
+        && session.teacherEarnings is number && session.teacherEarnings >= 0
+        && session.centerEarnings is number && session.centerEarnings >= 0
+        && session.cashCollected is number && session.cashCollected >= 0
+        && session.isClosed is bool;
+    }
+
+    function isValidCenterExpense(expense) {
+      return expense.category is string && expense.category.size() > 0 && expense.category.size() <= 50
+        && expense.amount is number && expense.amount >= 0
+        && expense.description is string && expense.description.size() <= 200
+        && expense.addedBy is string;
+    }
+
+    // --- RULES FOR COLLECTIONS (PHASE 4 - FORTRESS CODES) ---
+
+    // Centers Config - Singleton setup
+    match /centers_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidCenterConfig(incoming());
+    }
+
+    // User Profiles
+    match /user_profiles/{uid} {
+      allow read: if isSignedIn();
+      allow create: if (request.auth.uid == uid && incoming().role == "assistant" && incoming().uid == uid)
+        || (request.auth.uid == uid && request.auth.token.email == "motaem23y@gmail.com" && incoming().role == "admin" && incoming().uid == uid)
+        || (isAdmin());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Students Collection
+    match /students/{studentDocId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdmin() || isAssistant()) && isValidStudent(incoming()) && incoming().createdAt == request.time;
+      allow update: if (isAdmin() || isAssistant()) 
+        && isValidStudent(incoming()) 
+        && incoming().studentId == existing().studentId
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin();
+    }
+
+    // Teachers Collection
+    match /teachers/{teacherId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidTeacher(incoming());
+    }
+
+    // Classes / Groups Collection
+    match /classes_groups/{groupId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin() && isValidClassGroup(incoming());
+      // Admins can change everything, assistants can update stock only
+      allow update: if (isAdmin() && isValidClassGroup(incoming()))
+        || (isAssistant() 
+            && incoming().diff(existing()).affectedKeys().hasOnly(['bookletStock'])
+            && incoming().bookletStock is number);
+    }
+
+    // Attendance Logs
+    match /attendance_logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdmin() || isAssistant()) 
+        && isValidAttendanceLog(incoming())
+        && !isSessionClosed(incoming().sessionId)
+        && incoming().timestamp == request.time;
+      allow update: if (isAdmin() || isAssistant())
+        && isValidAttendanceLog(incoming())
+        && !isSessionClosed(existing().sessionId) // Ensure the old session wasn't frozen
+        && !isSessionClosed(incoming().sessionId) // Ensure the new session isn't frozen
+        && incoming().studentId == existing().studentId
+        && incoming().groupId == existing().groupId
+        && incoming().sessionId == existing().sessionId
+        && incoming().timestamp == existing().timestamp;
+      allow delete: if isAdmin() && !isSessionClosed(existing().sessionId);
+    }
+
+    // Financial Sessions
+    match /financial_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      // Creating dynamic session is permitted for assistants & admins
+      allow create: if (isAdmin() || isAssistant()) && isValidFinancialSession(incoming()) && incoming().sessionDate == request.time;
+      // Closing or editing splits are restricted to admins; assistants can commit changes to tally totals and toggle close only if they aren't changing teacher shares maliciously
+      allow update: if (isAdmin() && isValidFinancialSession(incoming()))
+        || (isAssistant() 
+            && !existing().isClosed // cannot edit once frozen
+            && isValidFinancialSession(incoming())
+            && incoming().diff(existing()).affectedKeys().hasAny(['totalAttendance', 'totalSessionRevenue', 'totalBookletsSold', 'totalBookletRevenue', 'teacherEarnings', 'centerEarnings', 'cashCollected', 'isClosed'])
+            && incoming().teacherEarnings == existing().teacherEarnings // prevent assistant from overriding teacher ratios
+            && incoming().centerEarnings == existing().centerEarnings);
+      allow delete: if isAdmin();
+    }
+
+    // Operational Expenses Ledger
+    match /center_expenses/{expenseId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && isValidCenterExpense(incoming()) && incoming().date == request.time;
+    }
+  }
+}
